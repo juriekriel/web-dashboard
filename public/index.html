@@ -56,9 +56,9 @@
   }
   button:hover, .btn:hover { border-color: var(--muted); background: var(--panel-2); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  input[type=password], input[type=text] {
+  input[type=password], input[type=text], input[type=email] {
     width: 100%;
-    padding: 9px 12px;
+    padding: 10px 12px;
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--fg);
@@ -75,7 +75,8 @@
     margin-bottom: 24px;
   }
   header.top .title-block .meta { margin-top: 4px; }
-  header.top .actions { display: flex; gap: 8px; }
+  header.top .actions { display: flex; gap: 8px; align-items: center; }
+  header.top .who { font-size: 12px; color: var(--muted); margin-right: 4px; }
 
   .site {
     display: grid;
@@ -126,13 +127,20 @@
   .drop.failed { border-color: var(--error); color: var(--error); }
   .drop input[type=file] { display: none; }
 
-  .login { max-width: 420px; margin: 80px auto; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
-  .login h1 { margin-bottom: 6px; }
-  .login p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
-  .login p code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
-  .login .row { margin-bottom: 12px; }
-  .login button { width: 100%; padding: 10px; }
-  .login .err { color: var(--error); font-size: 13px; margin-top: 12px; min-height: 18px; }
+  /* Login / PAT-prompt cards */
+  .card { max-width: 420px; margin: 80px auto; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  .card h1 { margin-bottom: 6px; }
+  .card p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .card p code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .card .row { margin-bottom: 10px; }
+  .card .primary { width: 100%; padding: 11px; background: var(--accent); color: var(--bg); border: none; font-weight: 600; }
+  .card .primary:hover { background: var(--accent); filter: brightness(1.05); }
+  .card .secondary { width: 100%; padding: 11px; }
+  .card .or { text-align: center; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 10px 0 8px; }
+  .card .err { color: var(--error); font-size: 13px; margin-top: 12px; min-height: 18px; }
+  .card .info { color: var(--success); font-size: 13px; margin-top: 12px; }
+  .card .signout { display: block; text-align: center; margin-top: 16px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .card .signout:hover { color: var(--fg); }
 
   .empty { padding: 48px 16px; text-align: center; color: var(--muted); }
   .err-banner { padding: 12px 16px; border: 1px solid var(--error); background: rgba(239,68,68,0.08); color: var(--error); border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
@@ -148,11 +156,22 @@
 <div class="wrap" id="root">Loading…</div>
 
 <script type="module">
-const PAT_KEY = 'netlify_pat_v1';
-const NETLIFY = 'https://api.netlify.com/api/v1';
-const root = document.getElementById('root');
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// ── Config ─────────────────────────────────────────────────────────────────
+// Supabase project shared with ib-inbox / ali. The publishable key is safe in
+// the browser by design (it's gated by Row Level Security and Auth).
+const SUPABASE_URL = 'https://asujxmeolnokjyaephaw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ZOKIQQ9KKY3rftUqBZFo0w_Ha2UBeIT';
+const NETLIFY = 'https://api.netlify.com/api/v1';
+const PAT_KEY = 'netlify_pat_v1';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+});
+const root = document.getElementById('root');
 let pat = localStorage.getItem(PAT_KEY) || '';
+let user = null;
 
 // ── Netlify API helpers ────────────────────────────────────────────────────
 async function nf(path, opts = {}) {
@@ -188,7 +207,6 @@ async function deployFile(siteId, file) {
   const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
 
   if (isZip) {
-    // Binary zip upload
     const r = await nf(`/sites/${siteId}/deploys`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/zip' },
@@ -198,9 +216,6 @@ async function deployFile(siteId, file) {
     return r.json();
   }
 
-  // Single-file digest deploy. We deploy whatever was dropped as /index.html
-  // (replacing the site's current homepage). For other paths the user can
-  // upload a zip with their preferred structure.
   const sha1 = await sha1hex(buf);
   const create = await nf(`/sites/${siteId}/deploys`, {
     method: 'POST',
@@ -241,18 +256,68 @@ function timeAgo(iso) {
 }
 
 // ── Views ──────────────────────────────────────────────────────────────────
-function loginView(initialErr = '') {
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function authView(initialErr = '') {
   root.innerHTML = `
-    <div class="login">
-      <h1>Dashboard</h1>
+    <div class="card">
+      <h1>Sign in</h1>
+      <p>Use your team email. We'll send a one-tap magic link.</p>
+      <div class="row">
+        <input id="email" type="email" placeholder="you@…" autocomplete="email" autofocus>
+      </div>
+      <button class="primary" id="magic">Email me a magic link</button>
+      <div class="or">or</div>
+      <button class="secondary" id="google">Continue with Google</button>
+      <div class="err" id="err">${escapeHtml(initialErr)}</div>
+    </div>`;
+  const emailEl = document.getElementById('email');
+  const errEl = document.getElementById('err');
+  const setErr = (m, kind = 'err') => { errEl.textContent = m; errEl.className = kind; };
+
+  const sendMagic = async () => {
+    const email = emailEl.value.trim();
+    if (!email) { setErr('Enter your email first.'); return; }
+    setErr('Sending…');
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${location.origin}/` }
+    });
+    if (error) { setErr(error.message); return; }
+    setErr(`Magic link sent to ${email}. Check your inbox.`, 'info');
+  };
+
+  const google = async () => {
+    setErr('Redirecting…');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${location.origin}/` }
+    });
+    if (error) setErr(error.message);
+  };
+
+  document.getElementById('magic').onclick = sendMagic;
+  document.getElementById('google').onclick = google;
+  emailEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendMagic(); });
+}
+
+function patPromptView(initialErr = '') {
+  root.innerHTML = `
+    <div class="card">
+      <h1>One more step</h1>
       <p>Paste a Netlify <strong>Personal Access Token</strong>. Generate one at
          <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noopener">netlify.com/user/applications</a>.
-         The token is stored only in this browser's local storage; it never leaves your machine.</p>
+         Stored only in this browser; never leaves your machine.</p>
       <div class="row">
         <input id="pat" type="password" placeholder="nfp_…" autocomplete="off" autofocus>
       </div>
-      <button id="go">Continue</button>
+      <button class="primary" id="go">Continue</button>
       <div class="err" id="err">${escapeHtml(initialErr)}</div>
+      <a class="signout" id="signout">Sign out</a>
     </div>`;
   const input = document.getElementById('pat');
   const err = document.getElementById('err');
@@ -267,6 +332,7 @@ function loginView(initialErr = '') {
     main();
   };
   document.getElementById('go').onclick = submit;
+  document.getElementById('signout').onclick = signOut;
   input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 }
 
@@ -295,6 +361,7 @@ function siteRow(s) {
 }
 
 function dashView(sites) {
+  const userLabel = user?.email ? escapeHtml(user.email) : '';
   if (!sites || sites.length === 0) {
     root.innerHTML = `
       <header class="top">
@@ -303,11 +370,12 @@ function dashView(sites) {
           <div class="meta">No sites yet.</div>
         </div>
         <div class="actions">
-          <button id="logout" title="Forget PAT">Sign out</button>
+          <span class="who">${userLabel}</span>
+          <button id="signout">Sign out</button>
         </div>
       </header>
       <div class="empty">Create a site at <a href="https://app.netlify.com" target="_blank" rel="noopener">app.netlify.com</a> and refresh.</div>`;
-    document.getElementById('logout').onclick = signOut;
+    document.getElementById('signout').onclick = signOut;
     return;
   }
   root.innerHTML = `
@@ -317,26 +385,23 @@ function dashView(sites) {
         <div class="meta">Drop an <code>.html</code> or <code>.zip</code> on a site to deploy. Status auto-refreshes every 30s.</div>
       </div>
       <div class="actions">
+        <span class="who">${userLabel}</span>
         <button id="refresh">Refresh</button>
-        <button id="logout" title="Forget PAT and sign out">Sign out</button>
+        <button id="signout" title="Sign out and clear PAT">Sign out</button>
       </div>
     </header>
     <div id="list">${sites.map(siteRow).join('')}</div>`;
   document.getElementById('refresh').onclick = () => main();
-  document.getElementById('logout').onclick = signOut;
+  document.getElementById('signout').onclick = signOut;
   wireDropZones();
 }
 
-function signOut() {
+async function signOut() {
   pat = '';
   localStorage.removeItem(PAT_KEY);
-  loginView();
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
+  await supabase.auth.signOut();
+  user = null;
+  authView();
 }
 
 // ── Drop zones / deploy flow ────────────────────────────────────────────────
@@ -396,7 +461,22 @@ function prettyBytes(n) {
 let refreshTimer = null;
 
 async function main() {
-  if (!pat) return loginView();
+  // Layer 1: Supabase identity. Anyone not in the project's user list can't
+  // even reach the PAT prompt.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    user = null;
+    return authView();
+  }
+  user = session.user;
+
+  // Layer 2: Netlify access (PAT). Each user provides their own.
+  if (!pat) {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    return patPromptView();
+  }
+
   try {
     const sites = await listSites();
     dashView(sites);
@@ -404,7 +484,7 @@ async function main() {
     refreshTimer = setInterval(silentRefresh, 30_000);
   } catch (e) {
     if (e.message.includes('401')) {
-      loginView('Token rejected. Paste a fresh one.');
+      patPromptView('Token rejected. Paste a fresh one.');
     } else {
       root.innerHTML = `<div class="err-banner">${escapeHtml(e.message)}</div>`;
     }
@@ -413,16 +493,21 @@ async function main() {
 
 async function silentRefresh() {
   if (!pat) return;
-  // Don't redraw if user is mid-upload
   if (document.querySelector('.drop.uploading')) return;
   try {
     const sites = await listSites();
     dashView(sites);
   } catch (e) {
-    // Soft-fail: leave existing view in place
     console.warn('refresh failed:', e.message);
   }
 }
+
+// React to Supabase session changes (sign-in, sign-out, magic-link return).
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+    main();
+  }
+});
 
 main();
 </script>
