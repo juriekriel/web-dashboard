@@ -164,16 +164,28 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = 'https://asujxmeolnokjyaephaw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZOKIQQ9KKY3rftUqBZFo0w_Ha2UBeIT';
 const NETLIFY = 'https://api.netlify.com/api/v1';
-const PAT_KEY = 'netlify_pat_v1';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
 });
 const root = document.getElementById('root');
-let pat = localStorage.getItem(PAT_KEY) || '';
+let pat = '';      // fetched from Supabase app_config after auth, never persisted
 let user = null;
 
 // ── Netlify API helpers ────────────────────────────────────────────────────
+async function fetchPatFromSupabase() {
+  const { data, error } = await supabase
+    .from('app_config')
+    .select('value')
+    .eq('key', 'netlify_pat')
+    .single();
+  if (error) throw new Error(`Supabase fetch failed: ${error.message}`);
+  if (!data?.value || data.value === 'PLACEHOLDER_REPLACE_ME') {
+    throw new Error('Netlify PAT not configured. Ask Jurie to set it in Supabase app_config.');
+  }
+  return data.value;
+}
+
 async function nf(path, opts = {}) {
   const headers = new Headers(opts.headers || {});
   headers.set('Authorization', `Bearer ${pat}`);
@@ -182,9 +194,7 @@ async function nf(path, opts = {}) {
   }
   const r = await fetch(NETLIFY + path, { ...opts, headers });
   if (r.status === 401) {
-    pat = '';
-    localStorage.removeItem(PAT_KEY);
-    throw new Error('PAT rejected (401)');
+    throw new Error('PAT rejected by Netlify (401). The token in Supabase may be stale or revoked.');
   }
   return r;
 }
@@ -193,11 +203,6 @@ async function listSites() {
   const r = await nf('/sites?sort_by=updated_at&filter=all');
   if (!r.ok) throw new Error('list-sites failed: ' + r.status);
   return r.json();
-}
-
-async function verifyPat(token) {
-  const r = await fetch(NETLIFY + '/user', { headers: { Authorization: `Bearer ${token}` } });
-  return r.ok;
 }
 
 // File-digest deploy method — works for any single-file upload, no size cap.
@@ -305,35 +310,14 @@ function authView(initialErr = '') {
   emailEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendMagic(); });
 }
 
-function patPromptView(initialErr = '') {
+function configErrorView(message) {
   root.innerHTML = `
     <div class="card">
-      <h1>One more step</h1>
-      <p>Paste a Netlify <strong>Personal Access Token</strong>. Generate one at
-         <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noopener">netlify.com/user/applications</a>.
-         Stored only in this browser; never leaves your machine.</p>
-      <div class="row">
-        <input id="pat" type="password" placeholder="nfp_…" autocomplete="off" autofocus>
-      </div>
-      <button class="primary" id="go">Continue</button>
-      <div class="err" id="err">${escapeHtml(initialErr)}</div>
+      <h1>Setup needed</h1>
+      <p>${escapeHtml(message)}</p>
       <a class="signout" id="signout">Sign out</a>
     </div>`;
-  const input = document.getElementById('pat');
-  const err = document.getElementById('err');
-  const submit = async () => {
-    const token = input.value.trim();
-    if (!token) { err.textContent = 'Token required.'; return; }
-    err.textContent = 'Verifying…';
-    const ok = await verifyPat(token).catch(() => false);
-    if (!ok) { err.textContent = 'Token rejected by Netlify. Check it and try again.'; return; }
-    pat = token;
-    localStorage.setItem(PAT_KEY, pat);
-    main();
-  };
-  document.getElementById('go').onclick = submit;
   document.getElementById('signout').onclick = signOut;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 }
 
 function siteRow(s) {
@@ -398,7 +382,6 @@ function dashView(sites) {
 
 async function signOut() {
   pat = '';
-  localStorage.removeItem(PAT_KEY);
   await supabase.auth.signOut();
   user = null;
   authView();
@@ -462,19 +445,26 @@ let refreshTimer = null;
 
 async function main() {
   // Layer 1: Supabase identity. Anyone not in the project's user list can't
-  // even reach the PAT prompt.
+  // even reach the PAT.
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
     user = null;
+    pat = '';
     return authView();
   }
   user = session.user;
 
-  // Layer 2: Netlify access (PAT). Each user provides their own.
+  // Layer 2: Fetch the shared Netlify PAT from Supabase (RLS means only
+  // authenticated users can read it). Once fetched, kept in module memory
+  // for the session — never persisted to localStorage.
   if (!pat) {
-    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-    return patPromptView();
+    try {
+      pat = await fetchPatFromSupabase();
+    } catch (e) {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      return configErrorView(e.message);
+    }
   }
 
   try {
@@ -483,11 +473,7 @@ async function main() {
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(silentRefresh, 30_000);
   } catch (e) {
-    if (e.message.includes('401')) {
-      patPromptView('Token rejected. Paste a fresh one.');
-    } else {
-      root.innerHTML = `<div class="err-banner">${escapeHtml(e.message)}</div>`;
-    }
+    root.innerHTML = `<div class="err-banner">${escapeHtml(e.message)}</div>`;
   }
 }
 
