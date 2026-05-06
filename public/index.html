@@ -187,9 +187,13 @@ const cookieStorage = {
   },
 };
 
+// Use the Supabase default storageKey (sb-{project_ref}-auth-token) so the
+// cookie name matches what ali-web sets on .juriekriel.info. That's how this
+// dashboard inherits the session — sign in once at ali.juriekriel.info, the
+// cookie travels here automatically.
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: ON_JK_DOMAIN
-    ? { storage: cookieStorage, storageKey: 'sb-juriekriel-auth',
+    ? { storage: cookieStorage,
         detectSessionInUrl: true, persistSession: true, autoRefreshToken: true, flowType: 'pkce' }
     : { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
 });
