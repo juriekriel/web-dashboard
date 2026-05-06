@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+<title>Sites · Jurie</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #161a20;
+    --panel-2: #1c2128;
+    --border: #242a33;
+    --fg: #e8eaed;
+    --muted: #9aa0a6;
+    --accent: #6ee7b7;
+    --warn: #fbbf24;
+    --error: #ef4444;
+    --success: #22c55e;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #faf8f5;
+      --panel: #ffffff;
+      --panel-2: #f5f3ee;
+      --border: #e5e1d8;
+      --fg: #1a1a1a;
+      --muted: #6b7280;
+      --accent: #047857;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--muted); }
+  .meta { color: var(--muted); font-size: 13px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button, .btn {
+    font: inherit;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--fg);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  button:hover, .btn:hover { border-color: var(--muted); background: var(--panel-2); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input[type=password], input[type=text] {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    border-radius: 6px;
+    font: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  header.top .title-block .meta { margin-top: 4px; }
+  header.top .actions { display: flex; gap: 8px; }
+
+  .site {
+    display: grid;
+    grid-template-columns: 12px 1fr auto;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    margin-bottom: 8px;
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.ready { background: var(--success); }
+  .dot.error { background: var(--error); }
+  .dot.building { background: var(--warn); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+  .site .body { min-width: 0; }
+  .site .name {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .site .url { font-size: 12.5px; }
+  .site .when { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .site .when .state { text-transform: capitalize; }
+  .drop {
+    border: 1px dashed var(--border);
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 12.5px;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .drop:hover { border-color: var(--muted); color: var(--fg); }
+  .drop.over { border-color: var(--accent); color: var(--accent); background: rgba(110,231,183,0.08); }
+  .drop.uploading { border-color: var(--warn); color: var(--warn); }
+  .drop.success { border-color: var(--success); color: var(--success); }
+  .drop.failed { border-color: var(--error); color: var(--error); }
+  .drop input[type=file] { display: none; }
+
+  .login { max-width: 420px; margin: 80px auto; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  .login h1 { margin-bottom: 6px; }
+  .login p { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .login p code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .login .row { margin-bottom: 12px; }
+  .login button { width: 100%; padding: 10px; }
+  .login .err { color: var(--error); font-size: 13px; margin-top: 12px; min-height: 18px; }
+
+  .empty { padding: 48px 16px; text-align: center; color: var(--muted); }
+  .err-banner { padding: 12px 16px; border: 1px solid var(--error); background: rgba(239,68,68,0.08); color: var(--error); border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+
+  @media (max-width: 600px) {
+    .site { grid-template-columns: 9px 1fr; padding: 12px; }
+    .site .drop { grid-column: 2; justify-self: stretch; text-align: center; margin-top: 4px; }
+    header.top { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="root">Loading…</div>
+
+<script type="module">
+const PAT_KEY = 'netlify_pat_v1';
+const NETLIFY = 'https://api.netlify.com/api/v1';
+const root = document.getElementById('root');
+
+let pat = localStorage.getItem(PAT_KEY) || '';
+
+// ── Netlify API helpers ────────────────────────────────────────────────────
+async function nf(path, opts = {}) {
+  const headers = new Headers(opts.headers || {});
+  headers.set('Authorization', `Bearer ${pat}`);
+  if (opts.body && !headers.has('Content-Type') && !(opts.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const r = await fetch(NETLIFY + path, { ...opts, headers });
+  if (r.status === 401) {
+    pat = '';
+    localStorage.removeItem(PAT_KEY);
+    throw new Error('PAT rejected (401)');
+  }
+  return r;
+}
+
+async function listSites() {
+  const r = await nf('/sites?sort_by=updated_at&filter=all');
+  if (!r.ok) throw new Error('list-sites failed: ' + r.status);
+  return r.json();
+}
+
+async function verifyPat(token) {
+  const r = await fetch(NETLIFY + '/user', { headers: { Authorization: `Bearer ${token}` } });
+  return r.ok;
+}
+
+// File-digest deploy method — works for any single-file upload, no size cap.
+// For zips, falls back to direct binary POST.
+async function deployFile(siteId, file) {
+  const buf = await file.arrayBuffer();
+  const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+
+  if (isZip) {
+    // Binary zip upload
+    const r = await nf(`/sites/${siteId}/deploys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/zip' },
+      body: buf,
+    });
+    if (!r.ok) throw new Error(`deploy ${r.status}: ${await r.text()}`);
+    return r.json();
+  }
+
+  // Single-file digest deploy. We deploy whatever was dropped as /index.html
+  // (replacing the site's current homepage). For other paths the user can
+  // upload a zip with their preferred structure.
+  const sha1 = await sha1hex(buf);
+  const create = await nf(`/sites/${siteId}/deploys`, {
+    method: 'POST',
+    body: JSON.stringify({ files: { '/index.html': sha1 } }),
+  });
+  if (!create.ok) throw new Error(`deploy create ${create.status}: ${await create.text()}`);
+  const deploy = await create.json();
+  if ((deploy.required || []).includes(sha1)) {
+    const up = await nf(`/deploys/${deploy.id}/files/index.html`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: buf,
+    });
+    if (!up.ok) throw new Error(`upload ${up.status}: ${await up.text()}`);
+  }
+  return deploy;
+}
+
+async function sha1hex(buf) {
+  const hash = await crypto.subtle.digest('SHA-1', buf);
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── Time formatting ────────────────────────────────────────────────────────
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' h ago';
+  const dys = Math.floor(h / 24);
+  if (dys < 30) return dys + ' d ago';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Views ──────────────────────────────────────────────────────────────────
+function loginView(initialErr = '') {
+  root.innerHTML = `
+    <div class="login">
+      <h1>Dashboard</h1>
+      <p>Paste a Netlify <strong>Personal Access Token</strong>. Generate one at
+         <a href="https://app.netlify.com/user/applications#personal-access-tokens" target="_blank" rel="noopener">netlify.com/user/applications</a>.
+         The token is stored only in this browser's local storage; it never leaves your machine.</p>
+      <div class="row">
+        <input id="pat" type="password" placeholder="nfp_…" autocomplete="off" autofocus>
+      </div>
+      <button id="go">Continue</button>
+      <div class="err" id="err">${escapeHtml(initialErr)}</div>
+    </div>`;
+  const input = document.getElementById('pat');
+  const err = document.getElementById('err');
+  const submit = async () => {
+    const token = input.value.trim();
+    if (!token) { err.textContent = 'Token required.'; return; }
+    err.textContent = 'Verifying…';
+    const ok = await verifyPat(token).catch(() => false);
+    if (!ok) { err.textContent = 'Token rejected by Netlify. Check it and try again.'; return; }
+    pat = token;
+    localStorage.setItem(PAT_KEY, pat);
+    main();
+  };
+  document.getElementById('go').onclick = submit;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+}
+
+function siteRow(s) {
+  const dep = s.published_deploy;
+  const state = dep?.state || 'unknown';
+  const dotClass = state === 'ready' ? 'ready'
+                 : state === 'error' ? 'error'
+                 : ['building','uploading','processing','enqueued','prepared'].includes(state) ? 'building'
+                 : '';
+  const url = s.custom_domain ? `https://${s.custom_domain}` : (s.ssl_url || s.url);
+  const displayUrl = url.replace(/^https?:\/\//, '');
+  return `
+    <div class="site" data-id="${s.id}" data-name="${escapeHtml(s.name)}">
+      <div class="dot ${dotClass}" title="${state}"></div>
+      <div class="body">
+        <div class="name">${escapeHtml(s.name)}</div>
+        <a class="url" href="${url}" target="_blank" rel="noopener">${escapeHtml(displayUrl)}</a>
+        <div class="when"><span class="state">${state}</span> · ${timeAgo(dep?.created_at)}${dep?.deploy_time ? ` · built in ${dep.deploy_time}s` : ''}</div>
+      </div>
+      <label class="drop" data-id="${s.id}">
+        <span class="drop-label">Deploy file</span>
+        <input type="file" accept=".html,.zip">
+      </label>
+    </div>`;
+}
+
+function dashView(sites) {
+  if (!sites || sites.length === 0) {
+    root.innerHTML = `
+      <header class="top">
+        <div class="title-block">
+          <h1>Sites</h1>
+          <div class="meta">No sites yet.</div>
+        </div>
+        <div class="actions">
+          <button id="logout" title="Forget PAT">Sign out</button>
+        </div>
+      </header>
+      <div class="empty">Create a site at <a href="https://app.netlify.com" target="_blank" rel="noopener">app.netlify.com</a> and refresh.</div>`;
+    document.getElementById('logout').onclick = signOut;
+    return;
+  }
+  root.innerHTML = `
+    <header class="top">
+      <div class="title-block">
+        <h1>Sites <span class="meta">(${sites.length})</span></h1>
+        <div class="meta">Drop an <code>.html</code> or <code>.zip</code> on a site to deploy. Status auto-refreshes every 30s.</div>
+      </div>
+      <div class="actions">
+        <button id="refresh">Refresh</button>
+        <button id="logout" title="Forget PAT and sign out">Sign out</button>
+      </div>
+    </header>
+    <div id="list">${sites.map(siteRow).join('')}</div>`;
+  document.getElementById('refresh').onclick = () => main();
+  document.getElementById('logout').onclick = signOut;
+  wireDropZones();
+}
+
+function signOut() {
+  pat = '';
+  localStorage.removeItem(PAT_KEY);
+  loginView();
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// ── Drop zones / deploy flow ────────────────────────────────────────────────
+function wireDropZones() {
+  document.querySelectorAll('.drop').forEach(el => {
+    const siteId = el.dataset.id;
+    const input = el.querySelector('input[type=file]');
+    const labelEl = el.querySelector('.drop-label');
+    const originalLabel = labelEl.textContent;
+
+    const setLabel = (t) => { labelEl.textContent = t; };
+    const setStatus = (cls) => {
+      el.classList.remove('over', 'uploading', 'success', 'failed');
+      if (cls) el.classList.add(cls);
+    };
+    const reset = () => { setStatus(''); setLabel(originalLabel); };
+
+    const upload = async (file) => {
+      setStatus('uploading');
+      setLabel(`Uploading ${prettyBytes(file.size)}…`);
+      try {
+        await deployFile(siteId, file);
+        setStatus('success');
+        setLabel('Deployed ✓');
+        setTimeout(() => { reset(); main(); }, 1800);
+      } catch (e) {
+        setStatus('failed');
+        setLabel(`Failed: ${e.message}`.slice(0, 60));
+        setTimeout(reset, 5000);
+      }
+    };
+
+    input.addEventListener('change', () => {
+      if (input.files[0]) upload(input.files[0]);
+      input.value = '';
+    });
+    ['dragenter', 'dragover'].forEach(ev =>
+      el.addEventListener(ev, (e) => { e.preventDefault(); if (!el.classList.contains('uploading')) el.classList.add('over'); }));
+    ['dragleave', 'dragend'].forEach(ev =>
+      el.addEventListener(ev, () => el.classList.remove('over')));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('over');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) upload(f);
+    });
+  });
+}
+
+function prettyBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+// ── Main ────────────────────────────────────────────────────────────────────
+let refreshTimer = null;
+
+async function main() {
+  if (!pat) return loginView();
+  try {
+    const sites = await listSites();
+    dashView(sites);
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(silentRefresh, 30_000);
+  } catch (e) {
+    if (e.message.includes('401')) {
+      loginView('Token rejected. Paste a fresh one.');
+    } else {
+      root.innerHTML = `<div class="err-banner">${escapeHtml(e.message)}</div>`;
+    }
+  }
+}
+
+async function silentRefresh() {
+  if (!pat) return;
+  // Don't redraw if user is mid-upload
+  if (document.querySelector('.drop.uploading')) return;
+  try {
+    const sites = await listSites();
+    dashView(sites);
+  } catch (e) {
+    // Soft-fail: leave existing view in place
+    console.warn('refresh failed:', e.message);
+  }
+}
+
+main();
+</script>
+</body>
+</html>
