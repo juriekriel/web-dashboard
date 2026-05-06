@@ -164,7 +164,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = 'https://asujxmeolnokjyaephaw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZOKIQQ9KKY3rftUqBZFo0w_Ha2UBeIT';
 const NETLIFY = 'https://api.netlify.com/api/v1';
-const ALI_LAUNCHER = 'https://ali.juriekriel.info/';
 
 // SSO works only on real *.juriekriel.info subdomains (cookies can't span
 // netlify.app ↔ juriekriel.info). On the netlify.app preview URL we fall
@@ -410,12 +409,6 @@ async function signOut() {
   pat = '';
   await supabase.auth.signOut();
   user = null;
-  // On juriekriel.info subdomains, signing out clears the shared cookie —
-  // bounce to ali so the user lands on a clean sign-in surface.
-  if (ON_JK_DOMAIN) {
-    location.replace(ALI_LAUNCHER);
-    return;
-  }
   authView();
 }
 
@@ -476,20 +469,14 @@ function prettyBytes(n) {
 let refreshTimer = null;
 
 async function main() {
-  // Layer 1: Supabase identity. On juriekriel.info subdomains we use the
-  // shared session cookie set by the ali launcher; on the netlify.app
-  // preview URL we fall back to the inline sign-in screen.
+  // Layer 1: Supabase identity. We use cookie storage on juriekriel.info
+  // subdomains so a future SSO launcher could share sessions, but we always
+  // show the inline sign-in screen here — there's no upstream launcher yet.
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
     user = null;
     pat = '';
-    if (ON_JK_DOMAIN) {
-      // Hand off to the ali launcher; it sends the user back here after sign-in.
-      const ret = encodeURIComponent(location.href);
-      location.replace(`${ALI_LAUNCHER}?return=${ret}`);
-      return;
-    }
     return authView();
   }
   user = session.user;
