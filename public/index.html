@@ -164,9 +164,35 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = 'https://asujxmeolnokjyaephaw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZOKIQQ9KKY3rftUqBZFo0w_Ha2UBeIT';
 const NETLIFY = 'https://api.netlify.com/api/v1';
+const ALI_LAUNCHER = 'https://ali.juriekriel.info/';
+
+// SSO works only on real *.juriekriel.info subdomains (cookies can't span
+// netlify.app ↔ juriekriel.info). On the netlify.app preview URL we fall
+// back to a local sign-in screen using default localStorage.
+const ON_JK_DOMAIN = /\.juriekriel\.info$/i.test(location.hostname);
+
+// Cookie storage scoped to .juriekriel.info so ali, web, ib, sn etc. share
+// the same Supabase session. Sign in once at ali, signed in everywhere.
+const cookieStorage = {
+  getItem(key) {
+    const re = new RegExp('(?:^|; )' + key.replace(/[.$?*|{}()[\]\\\/+^]/g, '\\$&') + '=([^;]*)');
+    const m = document.cookie.match(re);
+    return m ? decodeURIComponent(m[1]) : null;
+  },
+  setItem(key, value) {
+    const enc = encodeURIComponent(value);
+    document.cookie = `${key}=${enc}; domain=.juriekriel.info; path=/; max-age=31536000; secure; samesite=lax`;
+  },
+  removeItem(key) {
+    document.cookie = `${key}=; domain=.juriekriel.info; path=/; max-age=0; secure; samesite=lax`;
+  },
+};
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
+  auth: ON_JK_DOMAIN
+    ? { storage: cookieStorage, storageKey: 'sb-juriekriel-auth',
+        detectSessionInUrl: true, persistSession: true, autoRefreshToken: true, flowType: 'pkce' }
+    : { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true }
 });
 const root = document.getElementById('root');
 let pat = '';      // fetched from Supabase app_config after auth, never persisted
@@ -384,6 +410,12 @@ async function signOut() {
   pat = '';
   await supabase.auth.signOut();
   user = null;
+  // On juriekriel.info subdomains, signing out clears the shared cookie —
+  // bounce to ali so the user lands on a clean sign-in surface.
+  if (ON_JK_DOMAIN) {
+    location.replace(ALI_LAUNCHER);
+    return;
+  }
   authView();
 }
 
@@ -444,13 +476,20 @@ function prettyBytes(n) {
 let refreshTimer = null;
 
 async function main() {
-  // Layer 1: Supabase identity. Anyone not in the project's user list can't
-  // even reach the PAT.
+  // Layer 1: Supabase identity. On juriekriel.info subdomains we use the
+  // shared session cookie set by the ali launcher; on the netlify.app
+  // preview URL we fall back to the inline sign-in screen.
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
     user = null;
     pat = '';
+    if (ON_JK_DOMAIN) {
+      // Hand off to the ali launcher; it sends the user back here after sign-in.
+      const ret = encodeURIComponent(location.href);
+      location.replace(`${ALI_LAUNCHER}?return=${ret}`);
+      return;
+    }
     return authView();
   }
   user = session.user;
